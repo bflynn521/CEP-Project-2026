@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="map-container">
+    <div class="container">
+
+        <div class="map-header-2">
+            <div>
+                <h2>Total Spaces</h2>
+                <a href="https://www.universityofgalway.ie/media/buildingsoffice/files/mapsrebranded2023/Parking-Locations_Galway-A4-Map_(230623).pdf" target="_blank">Map</a>
+            </div>
+
+            <div class="spaces-box">
+                <div>
+                    <h1>40 / 780</h1>
+                    <h3>Staff</h3>
+                </div>
+
+                <div>
+                    <h1>22 /36</h1>
+                    <h3>Visitor</h3>
+                </div>
+
+                <div>
+                    <h1>60 / 891</h1>
+                    <h3>Student & Staff</h3>
+                </div>
+            </div>
+        </div>
+
+        <div id="map"></div>
+        
+        <div class="legend">
+
+
+            <h3>Parking Zones</h3>
+            <div class="legend-items">
+                <div class="legend-item">
+                    <span class="legend-color" style="background: #2ecc71;"></span>
+                    <span>Available</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background: #f39c12;"></span>
+                    <span>Filling Up</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background: #e74c3c;"></span>
+                    <span>Full</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate.min.js"></script>
+
+<script>
+    var map = L.map('map', {
+        rotate: true,
+        bearing: -70,
+        zoomControl: false,
+        rotateControl: false
+    }).setView([53.2796, -9.0605], 16.5);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 20,
+    }).addTo(map);
+
+    
+    function getColor(used, total) {
+        const ratio = used / total;
+
+        if (ratio < 0.5) return '#2ecc71';   
+        if (ratio < 0.8) return '#f39c12';   
+        return '#e74c3c';                    
+    }
+
+ 
+    function createParking(coords, type, used, total) {
+        const color = getColor(used, total);
+
+        const polygon = L.polygon(coords, {
+            color: color,
+            fillColor: color,
+            fillOpacity: 0.6,
+            weight: 2
+        }).addTo(map);
+
+        polygon.bindPopup(`
+            <h3>${type} Parking</h3>
+            <p><strong>${used} / ${total}</strong> spaces used</p>
+        `);
+
+        return polygon;
+    }
+
+    
+    createParking([
+        [53.281214, -9.061924],
+        [53.280807, -9.061658],
+        [53.280760, -9.061884],
+        [53.281176, -9.062144]
+    ], "Staff", 40, 128);
+
+    createParking([
+        [53.281586, -9.063523],
+        [53.281498, -9.063735],
+        [53.281302, -9.063493],
+        [53.281354, -9.063348]
+    ], "Staff", 18, 19);
+
+    createParking([
+        [53.280426, -9.062652],
+        [53.280553, -9.062382],
+        [53.281005, -9.063022],
+        [53.280900, -9.063200]
+    ], "Staff", 100, 128);
+
+   
+    createParking([
+        [53.278069, -9.060151],
+        [53.278119, -9.060832],
+        [53.277702, -9.060927],
+        [53.277646, -9.060213]
+    ], "Staff", 22, 50);
+
+
+
+</script>
+
+
+
+{% endblock %}

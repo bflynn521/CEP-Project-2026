@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+
+
+<div class="container">
+    {% if users %}
+    <div class="swipe-stage">
+
+        <button class="arrow-btn" id="prevBtn" aria-label="Previous" disabled>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"/>
+            </svg>
+        </button>
+
+        <div>
+            <div class="card-stack" id="cardStack">
+                {% for user in users %}
+                <div class="driver-card" data-index="{{ forloop.counter0 }}">
+
+                    
+                    <div class="card-images">
+                        {% if user.image_2 %}
+                            <img class="car-img" src="{{ user.image_2.url }}" alt="Car">
+                        {% else %}
+                            <div class="img-placeholder">🚘</div>
+                        {% endif %}
+                        <div class="avatar-wrap">
+                            {% if user.image_1 %}
+                                <img class="avatar" src="{{ user.image_1.url }}" alt="{{ user.name }}">
+                            {% else %}
+                                <div class="avatar-placeholder">👤</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                
+                    <div class="card-body">
+                        <div class="card-name-row">
+                            <h2>{{ user.name }}</h2>
+                            {% if forloop.counter|divisibleby:2 %}
+                            <div class="stars">
+                                ★★★★★<span>5.0</span>
+                            </div>
+                            {% else %}
+                            <div class="stars">
+                                ★★★★<span style="color:#f0a500;font-size:0.78rem">½</span><span>4.5</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="card-meta">
+                            <span class="badge">📍 {{ user.location }}</span>
+                            {% if user.departure_time %}
+                            <span class="badge">🕐 {{ user.departure_time|time:"H:i" }}</span>
+                            {% endif %}
+                        </div>
+                        {% if user.description %}
+                        <p class="card-description">{{ user.description }}</p>
+                        {% endif %}
+                    </div>
+
+                
+                    <div class="card-footer">
+                        <span class="seats-info">🪑 {{ user.seats_available }} seat{{ user.seats_available|pluralize }} free</span>
+                        <a class="contact-link"
+                           {% if user.phone %}href="mailto:{{ user.phone }}"{% else %}href="#"{% endif %}>
+                            Contact
+                        </a>
+                    </div>
+
+                </div>
+                {% endfor %}
+            </div>
+
+            <p class="counter" id="counter">1 / {{ users|length }}</p>
+            <div class="key-hint">
+                <span class="key">←</span> prev &nbsp; next <span class="key">→</span>
+            </div>
+        </div>
+
+        <button class="arrow-btn" id="nextBtn" aria-label="Next">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+            </svg>
+        </button>
+
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div style="font-size:3rem">🚗</div>
+        <p>No drivers listed yet.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const cards   = Array.from(document.querySelectorAll('.driver-card'));
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const counter = document.getElementById('counter');
+    const total   = cards.length;
+    let current   = 0;
+
+    function show(index) {
+        cards.forEach(c => c.classList.remove('active', 'next'));
+
+        if (cards[index])     cards[index].classList.add('active');
+        if (cards[index + 1]) cards[index + 1].classList.add('next');
+
+        counter.textContent  = `${index + 1} / ${total}`;
+        prevBtn.disabled     = index === 0;
+        nextBtn.disabled     = index === total - 1;
+    }
+    show(0);
+
+    prevBtn.addEventListener('click', () => { if (current > 0)          show(--current); });
+    nextBtn.addEventListener('click', () => { if (current < total - 1)  show(++current); });
+
+    document.addEventListener('keydown', e => {
+        if (e.key === 'ArrowLeft'  && current > 0)         show(--current);
+        if (e.key === 'ArrowRight' && current < total - 1) show(++current);
+    });
+</script>
+{% endblock %}
