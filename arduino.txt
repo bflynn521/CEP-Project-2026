@@ -1,0 +1,198 @@
+#include <Arduino.h>
+#include <U8g2lib.h>
+#include <ArduinoJson.h>
+#include <LittleFS.h>
+
+// ---------------- OLED ----------------
+U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
+
+// ---------------- UART ToF ----------------
+#define RXD2 16
+#define TXD2 17
+
+// ---------------- CONFIG ----------------
+const float ROAD_WIDTH_M       = 5.87;
+const float DISTANCE_TO_ROAD_M = 0.4;
+const int   BASELINE_SAMPLES   = 40;
+const unsigned long MIN_BREAK_MS = 900;
+
+// ---------------- STATE ----------------
+float baseline_m  = 0;
+float threshold_m = 0;  // midpoint of road from sensor
+
+// ---------------- BASELINE BUFFER ----------------
+float readings[BASELINE_SAMPLES];
+int   readings_index = 0;
+
+// ---------------- DETECTION ----------------
+bool          currently_broken = false;
+unsigned long broken_start     = 0;
+float         min_distance_m   = 9999;   
+
+// ---------------- JSON ----------------
+const size_t JSON_CAPACITY = 4096;
+DynamicJsonDocument jsonDoc(JSON_CAPACITY);
+JsonArray carArray;
+
+// ---------------- TIMING ----------------
+unsigned long startTime;
+
+
+float mm_to_m(uint16_t mm) { return mm / 1000.0f; }
+
+void saveJSON() {
+  File file = LittleFS.open("/cars.json", "w");
+  if (!file) return;
+  serializeJsonPretty(jsonDoc, file);
+  file.close();
+}
+
+void exportJSON() {
+  File file = LittleFS.open("/cars.json", "r");
+  if (!file) { Serial.println("No file"); return; }
+  while (file.available()) Serial.write(file.read());
+  file.close();
+  Serial.println("\n=== END ===");
+}
+
+
+void setup() {
+  Serial.begin(115200);
+  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
+
+  u8g2.begin();
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_ncenB14_tr);
+  u8g2.drawStr(0, 25, "Booting...");
+  u8g2.sendBuffer();
+
+  LittleFS.begin(true);
+  carArray = jsonDoc.to<JsonArray>();
+
+  byte setPollingMode[5] = {0xA4, 0x06, 0x03, 0x02, 0xAF};
+  Serial2.write(setPollingMode, 5);
+  delay(100);
+
+  startTime = millis();
+}
+
+
+void loop() {
+
+  // ----- POLL SENSOR -----
+  while (Serial2.available()) Serial2.read();
+
+  byte requestFrame[5] = {0xA4, 0x03, 0x08, 0x02, 0xB1};
+  Serial2.write(requestFrame, 5);
+  delay(50);
+
+  uint16_t distance_mm = 0;
+  bool valid = false;
+
+  if (Serial2.available() >= 7) {
+    while (Serial2.available() && Serial2.peek() != 0xA4)
+      Serial2.read();
+
+    if (Serial2.available() >= 7) {
+      byte response[7];
+      Serial2.readBytes(response, 7);
+
+      byte checksum = 0;
+      for (int i = 0; i < 6; i++) checksum += response[i];
+
+      if (checksum == response[6]) {
+        distance_mm = (response[4] << 8) | response[5];
+        valid = true;
+      }
+    }
+  }
+
+  float distance_m = mm_to_m(distance_mm);
+
+  // ----- BASELINE (first N valid readings) -----
+  if (readings_index < BASELINE_SAMPLES && valid) {
+    readings[readings_index++] = distance_m;
+
+    float sum = 0;
+    for (int i = 0; i < readings_index; i++) sum += readings[i];
+    baseline_m = sum / readings_index;
+
+    // Midpoint of the road from the sensor
+    threshold_m = DISTANCE_TO_ROAD_M + (ROAD_WIDTH_M / 2.0f);
+  }
+
+  // ----- DETECTION -----
+  if (valid && readings_index >= BASELINE_SAMPLES) {
+
+    bool beam_broken = (distance_m < baseline_m - 0.2f);
+
+    if (beam_broken) {
+      if (!currently_broken) {
+        // Rising edge — start of a new event
+        currently_broken = true;
+        broken_start    = millis();
+        min_distance_m  = distance_m;
+      } else {
+        // Ongoing — track closest approach
+        if (distance_m < min_distance_m)
+          min_distance_m = distance_m;
+      }
+
+    } else {
+      if (currently_broken) {
+        // Falling edge — car has cleared
+        unsigned long duration = millis() - broken_start;
+
+        if (duration >= MIN_BREAK_MS) {
+          // Classify by which lane the car occupied
+          String type = (min_distance_m < threshold_m) ? "en" : "ex";
+
+          JsonObject car = carArray.createNestedObject();
+          car["timestamp_ms"]  = millis() - startTime;
+          car["duration_ms"]   = duration;
+          car["min_dist_mm"]   = (uint16_t)(min_distance_m * 1000);
+          car["threshold_mm"]  = (uint16_t)(threshold_m * 1000);
+          car["type"]          = type;
+
+          saveJSON();
+
+          Serial.printf("Car logged: %s | min=%.2fm | thresh=%.2fm | dur=%lums\n",
+                        type.c_str(), min_distance_m, threshold_m, duration);
+        }
+
+        currently_broken = false;
+        min_distance_m   = 9999;
+      }
+    }
+  }
+
+  // ----- DISPLAY -----
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_ncenB14_tr);
+  u8g2.setCursor(0, 20);
+
+  if (readings_index < BASELINE_SAMPLES) {
+    u8g2.print("Cal: ");
+    u8g2.print(readings_index);
+    u8g2.print("/");
+    u8g2.print(BASELINE_SAMPLES);
+  } else if (valid) {
+    u8g2.print(distance_mm);
+    u8g2.print(" mm");
+    u8g2.setCursor(0, 45);
+    u8g2.print(currently_broken ? "DETECTED" : "clear");
+  } else {
+    u8g2.print("No Data");
+  }
+
+  u8g2.sendBuffer();
+
+  // ----- SERIAL COMMANDS -----
+  if (Serial.available()) {
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+    if (cmd == "export") exportJSON();
+  }
+
+  delay(200);
+}
