@@ -3,38 +3,36 @@
 #include <ArduinoJson.h>
 #include <LittleFS.h>
 
-// ---------------- OLED ----------------
+// screen
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
-// ---------------- UART ToF ----------------
+// pin
 #define RXD2 16
 #define TXD2 17
 
-// ---------------- CONFIG ----------------
+// variables
 const float ROAD_WIDTH_M       = 5.87;
 const float DISTANCE_TO_ROAD_M = 0.4;
 const int   BASELINE_SAMPLES   = 40;
 const unsigned long MIN_BREAK_MS = 900;
 
-// ---------------- STATE ----------------
+
 float baseline_m  = 0;
 float threshold_m = 0;  // midpoint of road from sensor
 
-// ---------------- BASELINE BUFFER ----------------
+
 float readings[BASELINE_SAMPLES];
 int   readings_index = 0;
-
-// ---------------- DETECTION ----------------
 bool          currently_broken = false;
 unsigned long broken_start     = 0;
 float         min_distance_m   = 9999;   
 
-// ---------------- JSON ----------------
+// json
 const size_t JSON_CAPACITY = 4096;
 DynamicJsonDocument jsonDoc(JSON_CAPACITY);
 JsonArray carArray;
 
-// ---------------- TIMING ----------------
+// tming
 unsigned long startTime;
 
 
@@ -79,7 +77,7 @@ void setup() {
 
 void loop() {
 
-  // ----- POLL SENSOR -----
+  
   while (Serial2.available()) Serial2.read();
 
   byte requestFrame[5] = {0xA4, 0x03, 0x08, 0x02, 0xB1};
@@ -166,7 +164,7 @@ void loop() {
     }
   }
 
-  // ----- DISPLAY -----
+  // display
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_ncenB14_tr);
   u8g2.setCursor(0, 20);
@@ -187,7 +185,7 @@ void loop() {
 
   u8g2.sendBuffer();
 
-  // ----- SERIAL COMMANDS -----
+ 
   if (Serial.available()) {
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
